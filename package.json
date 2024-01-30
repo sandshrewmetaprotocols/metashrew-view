@@ -1,0 +1,28 @@
+{
+  "name": "metashrew-view",
+  "version": "0.1.0",
+  "description": "metashrew view",
+  "main": "lib/index.js",
+  "repository": "https://github.com/Oyl-Wallet/metashrew-view",
+  "author": "metashrew",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "build": "tsc"
+  },
+  "bin": {
+    "metashrew-view": "./bin/metashrew-view.js"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "ethers": "^6.10.0",
+    "express": "^4.18.2",
+    "rlp": "^3.0.0",
+    "rocksdb": "^5.2.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.10",
+    "typescript": "^5.3.3"
+  }
+}
