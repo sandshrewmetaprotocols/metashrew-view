@@ -7,6 +7,8 @@ const yargs = require('yargs');
 const { getLogger } = require('../lib/logger');
 const { run } = require('../lib');
 
+const logger = getLogger();
+
 const PROGRAM_PATH = process.env.PROGRAM_PATH || '/mnt/volume/indexer.wasm';
 
 (async () => {
