@@ -31,7 +31,7 @@ The metashrew_view RPC call takes three params:
 
 ```js
 
-[ programHash, functionName, inputHexString ]
+[ programHash, functionName, inputHexString, blockTag ]
 
 ```
 
