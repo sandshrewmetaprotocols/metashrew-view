@@ -8,6 +8,7 @@
   "license": "MIT",
   "private": false,
   "scripts": {
+    "start": "cross-env node bin/metashrew-view",
     "build": "tsc"
   },
   "bin": {
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.10",
+    "cross-env": "^7.0.3",
     "typescript": "^5.3.3"
   }
 }
