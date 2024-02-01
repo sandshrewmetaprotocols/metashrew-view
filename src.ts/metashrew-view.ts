@@ -42,6 +42,54 @@ export const readArrayBuffer = (memory: WebAssembly.Memory, ptr: number) => {
 const stripHexPrefix = (s) => (s.substr(0, 2) === "0x" ? s.substr(2) : s);
 const addHexPrefix = (s) => (s.substr(0, 2) === "0x" ? s : "0x" + s);
 
+async function get(db: any, key: Buffer): Promise<Buffer> {
+  try {
+    return await new Promise((resolve, reject) => db.get(key, (err, result) => err ? reject(err) : resolve(result)));
+  } catch (e) {
+    if (e.name === 'NotFoundError') return Buffer.from([]);
+    else throw e;
+  }
+}
+
+function swizzle(bytes: Buffer): Buffer {
+  return Buffer.from(Array.from(bytes).reverse());
+}
+
+function leftPad(hex: string, n: number): string {
+  return '0'.repeat(n - hex.length) + hex;
+}
+
+function makeIndexKey(key: Buffer, length: number): Buffer {
+  const data = Array.from(key);
+  return Buffer.from(data.concat(Array.from(swizzle(Buffer.from(leftPad(length.toString(16), 8), 'hex')))));
+}
+
+function makeLengthKey(key: Buffer): Buffer {
+  return makeIndexKey(key, 0xffffffff);
+}
+
+function bytesToNumber<T>(bytes: Array<T> | Buffer): number {
+  return Number('0x' + Buffer.from(bytes as any).toString('hex'));
+}
+
+async function getValueForBlock(db: any, key: Buffer, blockTag: string): Promise<Buffer> {
+  const blockNumber = blockTag === 'latest' ? 0xffffffff : Number(blockTag);
+  let i = (await getLengthAtKey(db, key) - 1);
+  while (i >= 0) {
+    const result = Array.from(await get(db, makeIndexKey(key, i)));
+    const resultHeight = bytesToNumber(result.slice(-4));
+    if (resultHeight <= blockNumber) return Buffer.from(result.slice(0, -4));
+    i--
+  }
+  return Buffer.from([]);
+}
+
+export async function getLengthAtKey(db: any, key: Buffer): Promise<number> {
+  const length = await get(db, makeLengthKey(key));
+  if (length.length === 0) return 0;
+  return Number('0x' + Buffer.from(length as any).toString('hex'));
+}
+
 export class IndexSandbox extends EventEmitter {
   public input: string;
   public program: ArrayBuffer;
@@ -81,18 +129,18 @@ export class IndexSandbox extends EventEmitter {
     return stripHexPrefix(this.input).length / 2;
   }
   __flush(v: number): void {}
-  async __get(k: number, v: number): Promise<void> {
+  async __get(blockTag: string, k: number, v: number): Promise<void> {
     const key = readArrayBufferAsHex(this.memory, k);
-    const value = await new Promise((resolve, reject) => this.db.get(Buffer.from(key.substr(2), 'hex'), (err, value) => err ? reject(err) : resolve(value)));
+    const value = await getValueForBlock(this.db, Buffer.from(key.substr(2), 'hex'), blockTag);
     const view = new Uint8Array(this.memory.buffer);
     const valueData = Buffer.from(stripHexPrefix(value), "hex");
     for (let i = 0; i < valueData.length; i++) {
       view[v + i] = valueData.readUInt8(i);
     }
   }
-  async __get_len(k: number): Promise<number> {
+  async __get_len(blockTag: string, k: number): Promise<number> {
     const key = readArrayBufferAsHex(this.memory, k);
-    const value: Buffer = await new Promise((resolve, reject) => this.db.get(Buffer.from(key.substr(2), 'hex'), (err, value) => err ? reject(err) : resolve(value)));
+    const value: Buffer = await getValueForBlock(this.db, Buffer.from(key.substr(2), 'hex'), blockTag);
     return value.length;
   }
   abort() {
@@ -103,14 +151,14 @@ export class IndexSandbox extends EventEmitter {
     this.input = input;
     return this;
   }
-  async run(symbol: string) {
+  async run(symbol: string, blockTag: string) {
     (this as any).instance = await WebAssembly.instantiate(this.program, {
       env: {
         abort: (...args) => (this as any).abort(...args),
         __log: (...args) => (this as any).__log(...args),
         __flush: (...args) => (this as any).__flush(...args),
-        __get: (...args) => (this as any).__get(...args),
-        __get_len: (...args) => (this as any).__get_len(...args),
+        __get: (...args) => (this as any).__get(blockTag, ...args),
+        __get_len: (...args) => (this as any).__get_len(blockTag, ...args),
         __host_len: () => (this as any).__host_len(),
         __load_input: (ptr: number) => (this as any).__load_input(ptr),
       },
@@ -139,12 +187,12 @@ export async function run(program: ArrayBuffer) {
       const { id, method, params } = req.body;
       try {
         if (method === 'metashrew_view') {
-          const [ programHash, fn, input ] = params;
+          const [ programHash, fn, input, blockTag ] = params;
           if (addHexPrefix(programHash) !== ethers.solidityPackedKeccak256(['bytes'], [addHexPrefix(Buffer.from(Array.from(new Uint8Array(program))).toString('hex'))])) throw Error('program hash invalid for process handler');
           const sandbox = new IndexSandbox(program);
 	  sandbox.setInput(input);
 	  await sandbox.openDatabase();
-	  const ptr = await sandbox.run(fn);
+	  const ptr = await sandbox.run(fn, blockTag);
 	  res.json({
             id,
 	    result: readArrayBufferAsHex(sandbox.memory, ptr),
