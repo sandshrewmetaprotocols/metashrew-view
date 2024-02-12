@@ -46,7 +46,7 @@ async function get(db: any, key: Buffer): Promise<Buffer> {
   try {
     return await new Promise((resolve, reject) => db.get(key, (err, result) => err ? reject(err) : resolve(result)));
   } catch (e) {
-    if (e.name === 'NotFound') return Buffer.from([]);
+    if (String(e).match('NotFound')) return Buffer.from([]);
     else throw e;
   }
 }
@@ -133,7 +133,7 @@ export class IndexSandbox extends EventEmitter {
     const key = readArrayBufferAsHex(this.memory, k);
     const value = await getValueForBlock(this.db, Buffer.from(key.substr(2), 'hex'), blockTag);
     const view = new Uint8Array(this.memory.buffer);
-    const valueData = Buffer.from(stripHexPrefix(value), "hex");
+    const valueData = value;
     for (let i = 0; i < valueData.length; i++) {
       view[v + i] = valueData.readUInt8(i);
     }
@@ -173,7 +173,7 @@ export function dumpJSONRPCPayload(payload) {
 }
 
 export function logMiddleware(req, res, next) {
-  const ip = req.get("X-Real-IP");
+  const ip = req.get("X-Real-IP") || '127.0.0.1';
   logger.info(ip + "|" + dumpJSONRPCPayload(req.body));
   next();
 }
@@ -186,11 +186,11 @@ export async function run(program: ArrayBuffer) {
   app.use(logMiddleware);
   app.post('/', (req, res) => {
     (async () => {
+      if (!req.body) return res.json({ success: "NO" });
       const { id, method, params } = req.body;
       try {
         if (method === 'metashrew_view') {
           const [ programHash, fn, input, blockTag ] = params;
-	  console.log(addHexPrefix(programHash));
           if (addHexPrefix(programHash) !== _programHash) throw Error('program hash invalid for process handler');
           const sandbox = new IndexSandbox(program);
 	  sandbox.setInput(input);
