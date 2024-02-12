@@ -46,7 +46,7 @@ async function get(db: any, key: Buffer): Promise<Buffer> {
   try {
     return await new Promise((resolve, reject) => db.get(key, (err, result) => err ? reject(err) : resolve(result)));
   } catch (e) {
-    if (e.name === 'NotFoundError') return Buffer.from([]);
+    if (e.name === 'NotFound') return Buffer.from([]);
     else throw e;
   }
 }
@@ -179,6 +179,8 @@ export function logMiddleware(req, res, next) {
 }
 
 export async function run(program: ArrayBuffer) {
+  const _programHash = ethers.solidityPackedKeccak256(['bytes'], [addHexPrefix(Buffer.from(Array.from(new Uint8Array(program))).toString('hex'))]);
+  logger.info('program hash: ' + _programHash);
   const app = express();
   app.use(bodyParser.json());
   app.use(logMiddleware);
@@ -188,7 +190,8 @@ export async function run(program: ArrayBuffer) {
       try {
         if (method === 'metashrew_view') {
           const [ programHash, fn, input, blockTag ] = params;
-          if (addHexPrefix(programHash) !== ethers.solidityPackedKeccak256(['bytes'], [addHexPrefix(Buffer.from(Array.from(new Uint8Array(program))).toString('hex'))])) throw Error('program hash invalid for process handler');
+	  console.log(addHexPrefix(programHash));
+          if (addHexPrefix(programHash) !== _programHash) throw Error('program hash invalid for process handler');
           const sandbox = new IndexSandbox(program);
 	  sandbox.setInput(input);
 	  await sandbox.openDatabase();
